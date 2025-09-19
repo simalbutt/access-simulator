@@ -1,14 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
 
-// Schema & Model
-const Employee = mongoose.model('Employee', new mongoose.Schema({
-  id: String,
-  access_level: Number,
-  request_time: String,
-  room: String
-}, { timestamps: true }));
+// Import the Employee model 
+const Employee = require('./../models/employee');
 
 // Room rules
 const ROOMS = {
@@ -17,14 +11,13 @@ const ROOMS = {
   "R&D Lab":    { minAccess: 1, open: "08:00", close: "12:00", cooldown: 10 }
 };
 
+// Helper: convert HH:mm -> minutes
 function toMinutes(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 }
 
-// ================= Routes =================
-
-// Add employees
+//  Add employees (bulk insert)
 router.post('/employees', async (req, res) => {
   try {
     const result = await Employee.insertMany(req.body);
@@ -44,6 +37,56 @@ router.get('/employees', async (req, res) => {
   }
 });
 
+//  Simulate access using DB data
+router.get('/simulate', async (req, res) => {
+  try {
+    // Fetch requests sorted by time, then insertion order
+    const requests = await Employee.find().sort({ request_time: 1, createdAt: 1 });
 
+    const lastAccess = {};
+    const results = [];
+
+    for (const req of requests) {
+      const { id, access_level, request_time, room } = req;
+      const r = { id, room, request_time };
+
+      const roomDef = ROOMS[room];
+      if (!roomDef) {
+        r.status = "Denied";
+        r.reason = "Unknown room";
+        results.push(r);
+        continue;
+      }
+
+      const reqMin = toMinutes(request_time);
+      const openMin = toMinutes(roomDef.open);
+      const closeMin = toMinutes(roomDef.close);
+
+      if (access_level < roomDef.minAccess) {
+        r.status = "Denied";
+        r.reason = `Below required level (${roomDef.minAccess})`;
+      } else if (!(reqMin >= openMin && reqMin < closeMin)) {
+        r.status = "Denied";
+        r.reason = `Room closed (${roomDef.open}-${roomDef.close})`;
+      } else {
+        lastAccess[id] = lastAccess[id] || {};
+        const last = lastAccess[id][room];
+        if (last && reqMin - last < roomDef.cooldown) {
+          r.status = "Denied";
+          r.reason = `Cooldown active (${roomDef.cooldown} min)`;
+        } else {
+          r.status = "Granted";
+          r.reason = `Access granted to ${room}`;
+          lastAccess[id][room] = reqMin;
+        }
+      }
+      results.push(r);
+    }
+
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;
