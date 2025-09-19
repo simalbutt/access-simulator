@@ -34,7 +34,7 @@ npm install
 
 Create a .env file with your MongoDB URI:
 
-MONGO_URI=mongodb+srv://simalbutt15_db_user:RSHuBuMgvUVVWArF@access-simulater.6cjso3c.mongodb.net/
+MONGO_URI=database url
 PORT=4000
 
 
