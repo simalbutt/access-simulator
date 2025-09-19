@@ -14,10 +14,10 @@ const employeeSchema = new mongoose.Schema(
       required: true,
     }, 
     room:
-     {
+    {
          type: String, 
          required: true
-         },
+    },
   },
   {
     timestamps: true,
